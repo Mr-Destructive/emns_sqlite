@@ -1,6 +1,3 @@
-git clone 'https://github.com/Mr-Destructive/emns_sqlite'
-cd emns_sqlite
-
 pip install virtualenv
 virtualenv env
 call env\Scripts\activate
