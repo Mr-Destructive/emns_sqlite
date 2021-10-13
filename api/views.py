@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render,redirect
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import CreateView
 from rest_framework.response import Response
@@ -19,11 +19,28 @@ import json
 
 from django.utils import timezone
 from mail.tasks import sendmails
+
+from time import sleep
+
+
 # Create your views here.
 def handle_uploaded_file(f):  
-    with open('mail/upload/'+f.name, 'wb+') as destination:  
+    destination = 'mail/uploads/'
+    with open(f.name, 'wb+') as destination:  
         for chunk in f.chunks():  
             destination.write(chunk)  
+            
+
+def sendmails(sender_email, reciever_email, password, message, send_time):
+    port = 465
+    difference = send_time.timestamp() - datetime.now(timezone.utc).timestamp()
+    #sleep(difference)
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
+        server.login(sender_email, password)
+        (server.sendmail(sender_email, reciever_email, message))
+
+
 
 class AddMailView(LoginRequiredMixin, CreateView):
     model = ScheduledMail
@@ -31,12 +48,13 @@ class AddMailView(LoginRequiredMixin, CreateView):
     template_name = 'mail/add.html'
     
     def form_valid(self, form):
+        super(AddMailView, self).form_valid(form)
         form.instance.sender = self.request.user.email
-        sendtime = form.instance.send_on
+        send_time = form.instance.send_on
         
         port = 465
         sender_email = self.request.user.email
-        reciever_email = form.instance.tags_list()
+        reciever_email = form.instance.recipients_list
         password = self.request.user.gapps_key
         body = form.instance.body
         subject = form.instance.subject
@@ -48,9 +66,13 @@ class AddMailView(LoginRequiredMixin, CreateView):
         
         message.attach(MIMEText(body, "plain"))
         
+
         file = form.instance.attachment_file
+        handle_uploaded_file(file)            
+
+        
         if file:
-            with open(file, "rb") as attachment:
+            with open(file.name,"rb") as attachment:
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(attachment.read())
 
@@ -58,27 +80,27 @@ class AddMailView(LoginRequiredMixin, CreateView):
 
             part.add_header(
                 "Content-Disposition",
-                f"attachment; filename= {filename}",
+                f"attachment; filename= {file}",
             )
 
+            
             message.attach(part)
-            message.attach(file.name, file.read(), file.content_type)
-
+            
         message = message.as_string()
 
-        
-        context = ssl.create_default_context()
-        
+        '''
+        loop = asyncio.new_event_loop()
+        async def create_tasks_func():
+            tasks = list()
+            tasks.append(asyncio.create_task(a_sendmails(sender_email, reciever_email, password, message, send_time)))
+            await asyncio.wait(tasks)
 
-        # instead of sending mails from here, we will call this later in the mails/tasks.py file to schedule
-        # sendmails(self.request, reciever_email, message, sendtime)
+        loop.run_until_complete(create_tasks_func())
+        loop.close()
+        '''
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
-            server.login(sender_email, password)
-            server.sendmail(sender_email, reciever_email, message)
+        sendmails(sender_email, reciever_email, password, message, send_time)
 
         return super(AddMailView, self).form_valid(form)
-
-
-
+        
 
