@@ -1,10 +1,10 @@
 from django import forms
 from .models import ScheduledMail
-
+from .datetimewidget import MinimalSplitDateTimeMultiWidget
 class MailForm(forms.ModelForm):
     class Meta:
         model = ScheduledMail
-        exclude  = ['sender',]
+        exclude  = ['sender']
 
         widgets = {
                 'subject': forms.TextInput(attrs={
@@ -17,12 +17,11 @@ class MailForm(forms.ModelForm):
                     }),
                 'recipients_list': forms.TextInput(attrs={
                     'class': 'form-control',
+                    'placeholder': 'Comma Seperated email-ids',
                     }),
-                'send_on': forms.DateTimeInput(attrs={
-                    'class': 'input-group date form-control ',
-                    }),
+                'send_on': MinimalSplitDateTimeMultiWidget(),
+
                 'attachment_file': forms.FileInput(attrs={
-                    'class':'form-control',
-                    }),
+                    'class': 'form-control',}),
 
                 }

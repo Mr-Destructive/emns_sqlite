@@ -18,14 +18,14 @@ import time, os
 import json
 
 from django.utils import timezone
-from mail.tasks import sendmails
+from mail.tasks import c_sendmails
 
 from time import sleep
+from datetime import tzinfo, timedelta, datetime
 
 
 # Create your views here.
 def handle_uploaded_file(f):  
-    destination = 'mail/uploads/'
     with open(f.name, 'wb+') as destination:  
         for chunk in f.chunks():  
             destination.write(chunk)  
@@ -33,13 +33,15 @@ def handle_uploaded_file(f):
 
 def sendmails(sender_email, reciever_email, password, message, send_time):
     port = 465
-    difference = send_time.timestamp() - datetime.now(timezone.utc).timestamp()
-    #sleep(difference)
+    now_time = datetime.now().replace(tzinfo=None)
+    difference = (send_time.replace(tzinfo=None) - now_time).total_seconds()
+    if(difference<0):
+        difference=0
+    sleep(difference)
     context = ssl.create_default_context()
     with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
         server.login(sender_email, password)
-        (server.sendmail(sender_email, reciever_email, message))
-
+        server.sendmail(sender_email, reciever_email, message)
 
 
 class AddMailView(LoginRequiredMixin, CreateView):
@@ -49,6 +51,7 @@ class AddMailView(LoginRequiredMixin, CreateView):
     
     def form_valid(self, form):
         super(AddMailView, self).form_valid(form)
+
         form.instance.sender = self.request.user.email
         send_time = form.instance.send_on
         
@@ -61,17 +64,17 @@ class AddMailView(LoginRequiredMixin, CreateView):
 
         message = MIMEMultipart()
         message["From"] = sender_email
-        message["To"] = ','.join(reciever_email)
+        message["To"] = reciever_email
         message["Subject"] = subject
         
         message.attach(MIMEText(body, "plain"))
         
 
         file = form.instance.attachment_file
-        handle_uploaded_file(file)            
 
         
         if file:
+            handle_uploaded_file(file)            
             with open(file.name,"rb") as attachment:
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(attachment.read())
@@ -84,9 +87,10 @@ class AddMailView(LoginRequiredMixin, CreateView):
             )
 
             
-            message.attach(part)
+            message.attach(file)
             
         message = message.as_string()
+
 
         '''
         loop = asyncio.new_event_loop()
@@ -98,9 +102,9 @@ class AddMailView(LoginRequiredMixin, CreateView):
         loop.run_until_complete(create_tasks_func())
         loop.close()
         '''
-
-        sendmails(sender_email, reciever_email, password, message, send_time)
-
-        return super(AddMailView, self).form_valid(form)
         
+        sendmails(sender_email, reciever_email, password, message, send_time)
+        #c_sendmails.delay(sender_email, reciever_email, password, message, send_time)
+
+        return super(AddMailView, self).form_valid(form)        
 

@@ -10,7 +10,7 @@ def sleepy(duration):
     return None
 
 #@shared_task
-def sendmails(request, reciever_email, message, send_time):
+def c_sendmails(request, reciever_email, message, send_time):
     port = 465
     password = request.user.gapps_key
     sender_email = request.user.email
